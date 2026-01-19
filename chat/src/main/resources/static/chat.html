@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>HiBuddy</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 40px;
+        }
+
+        #chat {
+            border: 1px solid #ccc;
+            height: 300px;
+            padding: 10px;
+            overflow-y: scroll;
+        }
+
+        #typing {
+            color: gray;
+            font-style: italic;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px 0;
+            width: 200px;
+        }
+
+        button {
+            padding: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>HiBuddy</h2>
+
+    <div>
+        Your name: <input id="from" placeholder="alice" oninput="checkInput()" />
+        Chat with: <input id="to" placeholder="bob" oninput="checkInput()" />
+        <button id="connectBtn" onclick="connect()" disabled>Connect</button>
+
+    </div>
+
+    <div id="chat"></div>
+    <div id="typing"></div>
+
+    <input id="message" placeholder="Type a message..." />
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        function checkInput() {
+            const from = document.getElementById("from").value.trim();
+            const to = document.getElementById("to").value.trim();
+            const button = document.getElementById("connectBtn");
+
+            button.disabled = !(from && to);
+        }
+        const chat = document.getElementById("chat");
+        const typingDiv = document.getElementById("typing");
+        const messageInput = document.getElementById("message");
+
+
+        function connect() {
+            const username = document.getElementById("from").value;
+            window.ws = new WebSocket("ws://localhost:8080/ws?username=" + username);
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === "status") {
+                    const el = document.getElementById("msg-" + msg.messageId);
+                    if (el) {
+                        if (msg.status === "SENT") el.innerHTML += " ✓";
+                        if (msg.status === "DELIVERED") el.innerHTML += " ✓✓";
+                        if (msg.status === "SEEN") el.innerHTML += " 👁";
+                    }
+                }
+
+                if (msg.type === "typing") {
+                    typingDiv.innerText = msg.from + (msg.typing ? " is typing..." : "");
+                }
+
+                if (msg.type === "message") {
+                    chat.innerHTML += `
+  <div id="msg-${msg.messageId}">
+    <b>${msg.from}:</b> ${msg.content}
+    <span style="color:gray;font-size:12px"> ✓✓</span>
+  </div>`;
+
+                    typingDiv.innerText = "";
+                }
+            };
+        }
+
+        // const ws = new WebSocket("ws://localhost:8080/ws");
+
+
+        // ws.onmessage = (event) => {
+        //     const msg = JSON.parse(event.data);
+
+        //     if (msg.type === "typing") {
+        //         typingDiv.innerText = msg.from + (msg.typing ? " is typing..." : "");
+        //     }
+
+        //     if (msg.type === "message") {
+        //         chat.innerHTML += `<div><b>${msg.from}:</b> ${msg.content}</div>`;
+        //         typingDiv.innerText = "";
+        //     }
+        // };
+
+        function sendMessage() {
+            const from = document.getElementById("from").value;
+            const to = document.getElementById("to").value;
+            const content = messageInput.value;
+
+            ws.send(JSON.stringify({
+                type: "message",
+                from,
+                to,
+                content
+            }));
+
+            chat.innerHTML += `<div><b>You:</b> ${content}</div>`;
+            messageInput.value = "";
+        }
+
+        messageInput.addEventListener("input", () => {
+            const from = document.getElementById("from").value;
+            const to = document.getElementById("to").value;
+
+            ws.send(JSON.stringify({
+                type: "typing",
+                from,
+                to,
+                typing: true
+            }));
+
+            clearTimeout(window.typingTimer);
+            window.typingTimer = setTimeout(() => {
+                ws.send(JSON.stringify({
+                    type: "typing",
+                    from,
+                    to,
+                    typing: false
+                }));
+            }, 1000);
+        });
+        chat.addEventListener("click", () => {
+            ws.send(JSON.stringify({
+                type: "seen",
+                messageId: lastMessageId
+            }));
+        });
+
+    </script>
+
+</body>
+
+</html>
